@@ -1,0 +1,12 @@
+# 依赖（本项目零依赖，仅测试脚本可能用到）
+node_modules/
+
+# 测试临时产物
+test/.profile/
+test/canvas-dump.png
+test/*.log
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini

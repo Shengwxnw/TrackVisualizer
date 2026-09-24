@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrackVisualizer · MIDI 可视化</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+  <!-- ==================== 侧边控制面板 ==================== -->
+  <aside id="sidebar">
+    <header class="brand">
+      <div class="logo">TD</div>
+      <div class="brand-text">
+        <h1>TrackVisualizer</h1>
+        <p>MIDI 可视化 · 预览 · 视频导出</p>
+      </div>
+      <button id="btnCollapse" class="icon-btn" title="收起面板 (Tab)">‹</button>
+    </header>
+
+    <div class="scroll">
+      <!-- 导入 -->
+      <details class="panel" open>
+        <summary>① 导入 MIDI</summary>
+        <div class="panel-body">
+          <div id="dropzone" class="dropzone">
+            <div class="dz-icon">＋</div>
+            <p>点击选择，或把 .mid / .midi 拖到这里</p>
+            <span>可一次导入多个文件，每个文件生成一条独立配色轨道</span>
+            <input type="file" id="fileInput" multiple accept=".mid,.midi,audio/midi,audio/x-midi">
+          </div>
+          <div class="row">
+            <button class="btn" id="btnDemo">加载示例</button>
+            <button class="btn ghost" id="btnClear">清空全部</button>
+          </div>
+          <p class="hint" id="loadHint"></p>
+        </div>
+      </details>
+
+      <!-- 轨道 -->
+      <details class="panel" open>
+        <summary>② 轨道与配色 <span class="tag" id="trackCount">0</span></summary>
+        <div class="panel-body">
+          <div id="trackList" class="track-list">
+            <p class="empty">暂无轨道，先导入 MIDI 文件</p>
+          </div>
+          <div class="row">
+            <button class="btn ghost sm" id="btnPalette">重新自动配色</button>
+            <button class="btn ghost sm" id="btnRandomColor">随机配色</button>
+          </div>
+        </div>
+      </details>
+
+      <!-- 视图 -->
+      <details class="panel" open>
+        <summary>③ 视图与音符</summary>
+        <div class="panel-body">
+          <div class="field">
+            <label>预览时长 <b data-out="lookAhead">2.0</b> 秒（竖线右侧可见范围）</label>
+            <input type="range" data-setting="lookAhead" min="1" max="16" step="0.1" value="2">
+          </div>
+          <div class="field">
+            <label>竖线位置 <b data-out="lineX">50</b>%</label>
+            <input type="range" data-setting="lineX" min="15" max="85" step="1" value="50">
+          </div>
+          <div class="field">
+            <label>音高范围</label>
+            <select data-setting="pitchMode">
+              <option value="auto">自动（跟随全部音符）</option>
+              <option value="manual">手动指定</option>
+            </select>
+          </div>
+          <div class="field row2" data-when="manual">
+            <label class="mini">最低 <input type="number" data-setting="pitchMin" min="0" max="127" step="1" value="36"></label>
+            <label class="mini">最高 <input type="number" data-setting="pitchMax" min="0" max="127" step="1" value="84"></label>
+          </div>
+          <div class="field">
+            <label>音符高度比例 <b data-out="noteHeightRatio">0.40</b></label>
+            <input type="range" data-setting="noteHeightRatio" min="0.15" max="1.2" step="0.01" value="0.4">
+          </div>
+          <div class="field">
+            <label>音符圆角 <b data-out="noteRadius">1.0</b></label>
+            <input type="range" data-setting="noteRadius" min="0" max="18" step="0.5" value="1">
+          </div>
+          <div class="field">
+            <label>音符不透明度 <b data-out="noteOpacity">1.00</b></label>
+            <input type="range" data-setting="noteOpacity" min="0.15" max="1" step="0.01" value="1">
+          </div>
+          <div class="field">
+            <label>音符光晕 <b data-out="noteGlow">0.30</b></label>
+            <input type="range" data-setting="noteGlow" min="0" max="2" step="0.05" value="0.3">
+          </div>
+          <label class="check"><input type="checkbox" data-setting="fadeAfterHit"> 越过竖线后淡出</label>
+
+          <div class="sub-label">浮动感</div>
+          <div class="field">
+            <label>浮动强度 <b data-out="floatAmount">4.0</b></label>
+            <input type="range" data-setting="floatAmount" min="0" max="10" step="0.5" value="4">
+          </div>
+          <div class="field">
+            <label>拖影层数 <b data-out="floatTrail">2</b></label>
+            <input type="range" data-setting="floatTrail" min="0" max="4" step="1" value="2">
+          </div>
+          <label class="check"><input type="checkbox" data-setting="floatBreath" checked> 呼吸缩放</label>
+          <label class="check"><input type="checkbox" data-setting="floatKick" checked> 命中回弹</label>
+
+          <div class="sub-label">时间轴</div>
+          <div class="field">
+            <label>开场留白 <b data-out="leadIn">2.0</b> 秒</label>
+            <input type="range" data-setting="leadIn" min="0" max="8" step="0.5" value="2">
+          </div>
+          <p class="hint">留白让曲子从第 N 秒才开始，给播放与导出编码器一点热身时间，
+            开头就不会因为掉帧而卡顿；导出时这段也会一并录进去。</p>
+        </div>
+      </details>
+
+      <!-- 背景 -->
+      <details class="panel">
+        <summary>④ 背景与网格</summary>
+        <div class="panel-body">
+          <div class="field row2">
+            <label class="mini">背景（上） <input type="color" data-setting="bgColor" value="#0a0e28"></label>
+            <label class="mini">背景（下） <input type="color" data-setting="bgColor2" value="#1e1640"></label>
+          </div>
+          <label class="check"><input type="checkbox" data-setting="bgGradient" checked> 纵向渐变</label>
+          <div class="field">
+            <label>竖线颜色</label>
+            <input type="color" data-setting="lineColor" value="#dfe4ec">
+          </div>
+          <div class="field">
+            <label>竖线粗细 <b data-out="lineWidth">1.5</b></label>
+            <input type="range" data-setting="lineWidth" min="0.5" max="8" step="0.5" value="1.5">
+          </div>
+          <div class="field">
+            <label>拖尾残影 <b data-out="trail">0.00</b></label>
+            <input type="range" data-setting="trail" min="0" max="0.9" step="0.01" value="0">
+          </div>
+          <label class="check"><input type="checkbox" data-setting="showGrid"> 节拍网格</label>
+          <div class="field row2">
+            <label class="mini">拍线 <input type="color" data-setting="gridColor" value="#3a3a42"></label>
+            <label class="mini">小节线 <input type="color" data-setting="gridBarColor" value="#71717c"></label>
+          </div>
+          <label class="check"><input type="checkbox" data-setting="showOctaveLines" checked> 八度分隔线</label>
+          <div class="field">
+            <label>八度线颜色</label>
+            <input type="color" data-setting="octaveLineColor" value="#2c2c33">
+          </div>
+          <label class="check"><input type="checkbox" data-setting="showNoteLabels"> 左侧显示音名</label>
+          <div class="field">
+            <label>音名颜色</label>
+            <input type="color" data-setting="labelColor" value="#6b6b73">
+          </div>
+          <label class="check"><input type="checkbox" data-setting="bgGlow"> 竖线中心辉光</label>
+          <label class="check"><input type="checkbox" data-setting="vignette"> 暗角</label>
+
+          <div class="sub-label">常驻星空</div>
+          <label class="check"><input type="checkbox" data-setting="starfield" checked> 开启星空</label>
+          <div class="field">
+            <label>星星颜色</label>
+            <input type="color" data-setting="starColor" value="#c9b8ff">
+          </div>
+          <div class="field">
+            <label>星星数量 <b data-out="starCount">160</b></label>
+            <input type="range" data-setting="starCount" min="0" max="600" step="10" value="160">
+          </div>
+          <div class="field">
+            <label>粒子大小 <b data-out="starSize">1.00</b></label>
+            <input type="range" data-setting="starSize" min="0.2" max="4" step="0.05" value="1">
+          </div>
+          <div class="field">
+            <label>漂移速度 <b data-out="starSpeed">22</b></label>
+            <input type="range" data-setting="starSpeed" min="0" max="200" step="2" value="22">
+          </div>
+          <div class="field">
+            <label>闪烁幅度 <b data-out="starTwinkle">0.45</b></label>
+            <input type="range" data-setting="starTwinkle" min="0" max="1" step="0.05" value="0.45">
+          </div>
+        </div>
+      </details>
+
+      <!-- 特效 -->
+      <details class="panel" open>
+        <summary>⑤ 命中特效</summary>
+        <div class="panel-body">
+          <label class="check"><input type="checkbox" data-setting="fxEnabled" checked> 开启命中特效</label>
+          <div class="field">
+            <label>粒子数量 <b data-out="particleCount">12</b></label>
+            <input type="range" data-setting="particleCount" min="0" max="80" step="1" value="12">
+          </div>
+          <div class="field">
+            <label>粒子速度 <b data-out="particleSpeed">380</b></label>
+            <input type="range" data-setting="particleSpeed" min="60" max="1400" step="10" value="380">
+          </div>
+          <div class="field">
+            <label>粒子寿命 <b data-out="particleLife">0.55</b> 秒</label>
+            <input type="range" data-setting="particleLife" min="0.15" max="2" step="0.05" value="0.55">
+          </div>
+          <div class="field">
+            <label>粒子大小 <b data-out="particleSize">2.6</b></label>
+            <input type="range" data-setting="particleSize" min="0.6" max="8" step="0.1" value="2.6">
+          </div>
+          <div class="field">
+            <label>闪光强度 <b data-out="flashStrength">0.00</b></label>
+            <input type="range" data-setting="flashStrength" min="0" max="2" step="0.05" value="0">
+          </div>
+          <label class="check"><input type="checkbox" data-setting="shockwave" checked> 冲击波圆环</label>
+          <div class="field">
+            <label>冲击波大小 <b data-out="shockwaveSize">1.00</b></label>
+            <input type="range" data-setting="shockwaveSize" min="0.3" max="2.5" step="0.05" value="1">
+          </div>
+          <div class="field">
+            <label>屏幕震动 <b data-out="shake">0</b></label>
+            <input type="range" data-setting="shake" min="0" max="10" step="0.5" value="0">
+          </div>
+          <button class="btn ghost sm" id="btnTestFx">测试一次特效</button>
+        </div>
+      </details>
+
+      <!-- 音频 -->
+      <details class="panel">
+        <summary>⑥ 内置合成器</summary>
+        <div class="panel-body">
+          <label class="check"><input type="checkbox" data-setting="synthEnabled"> 预览时播放合成器</label>
+          <div class="field">
+            <label>音量 <b data-out="volume">0.70</b></label>
+            <input type="range" data-setting="volume" min="0" max="1" step="0.01" value="0.7">
+          </div>
+          <div class="field">
+            <label>音色</label>
+            <select data-setting="waveType">
+              <option value="triangle">三角波（柔和）</option>
+              <option value="sine">正弦波（纯净）</option>
+              <option value="square">方波（复古）</option>
+              <option value="sawtooth">锯齿波（明亮）</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>八度移调 <b data-out="octaveShift">0</b></label>
+            <input type="range" data-setting="octaveShift" min="-2" max="2" step="1" value="0">
+          </div>
+          <p class="hint">首次播放需要点击页面以解锁浏览器音频。</p>
+        </div>
+      </details>
+
+      <!-- 导入音频 -->
+      <details class="panel" open>
+        <summary>⑦ 导入音频 <span class="tag" id="clipCount">0</span></summary>
+        <div class="panel-body">
+          <div id="audioDrop" class="dropzone">
+            <div class="dz-icon">＋</div>
+            <p>点击选择，或把音频拖到这里</p>
+            <span>mp3 / wav / ogg / m4a / flac，可导入多个并各自微调偏移</span>
+            <input type="file" id="audioInput" multiple accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac,.opus">
+          </div>
+          <div id="clipList" class="track-list">
+            <p class="empty">未导入音频，当前使用内置合成器</p>
+          </div>
+          <p class="hint">偏移＝「音频第 0 秒」对应的曲目时间，用来对齐 MIDI 与音频。
+            导出时可在「视频导出」里选择使用导入音频、合成器或两者混合。</p>
+        </div>
+      </details>
+
+      <!-- 导出 -->
+      <details class="panel">
+        <summary>⑧ 视频导出</summary>
+        <div class="panel-body">
+          <div class="field">
+            <label>分辨率</label>
+            <select data-setting="expPreset">
+              <option value="1920x1080">1920 × 1080 (横屏 16:9)</option>
+              <option value="2560x1440">2560 × 1440 (2K)</option>
+              <option value="3840x2160">3840 × 2160 (4K)</option>
+              <option value="1280x720">1280 × 720 (720p)</option>
+              <option value="1080x1080">1080 × 1080 (方形)</option>
+              <option value="1080x1920">1080 × 1920 (竖屏)</option>
+            </select>
+          </div>
+          <div class="field row2">
+            <label class="mini">帧率
+              <select data-setting="expFps">
+                <option value="30">30 fps</option>
+                <option value="60" selected>60 fps</option>
+              </select>
+            </label>
+            <label class="mini">画质
+              <select data-setting="expQuality">
+                <option value="low">低</option>
+                <option value="mid" selected>中</option>
+                <option value="high">高</option>
+              </select>
+            </label>
+          </div>
+          <div class="field">
+            <label>容器格式</label>
+            <select data-setting="expFormat">
+              <option value="auto">自动（优先 MP4）</option>
+              <option value="webm">WebM (VP9)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>导出范围</label>
+            <select data-setting="expRange">
+              <option value="all">整首曲目</option>
+              <option value="custom">自定义区间</option>
+            </select>
+          </div>
+          <div class="field row2" data-when="custom">
+            <label class="mini">开始 <input type="number" data-setting="expStart" min="0" step="0.1" value="0"></label>
+            <label class="mini">结束 <input type="number" data-setting="expEnd" min="0" step="0.1" value="0"></label>
+          </div>
+          <label class="check"><input type="checkbox" data-setting="expAudio" checked> 混入音频轨道</label>
+          <div class="field">
+            <label>音频来源</label>
+            <select data-setting="expAudioSource">
+              <option value="auto">自动（有导入音频则用它）</option>
+              <option value="import">仅导入音频（静音合成器）</option>
+              <option value="synth">仅内置合成器</option>
+              <option value="both">两者混合</option>
+            </select>
+          </div>
+          <label class="check"><input type="checkbox" data-setting="expCloseUi" checked> 导出时收起面板</label>
+          <button class="btn primary" id="btnExport">开始导出视频</button>
+          <p class="hint" id="mimeHint"></p>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>快捷键</summary>
+        <div class="panel-body keys">
+          <div><kbd>空格</kbd> 播放 / 暂停</div>
+          <div><kbd>R</kbd> 回到开头</div>
+          <div><kbd>←</kbd> <kbd>→</kbd> 快退 / 快进 2 秒</div>
+          <div><kbd>F</kbd> 沉浸模式</div>
+          <div><kbd>E</kbd> 导出视频</div>
+          <div><kbd>Tab</kbd> 收起 / 展开面板</div>
+        </div>
+      </details>
+    </div>
+  </aside>
+
+  <!-- ==================== 舞台 ==================== -->
+  <main id="main">
+    <div id="stage">
+      <canvas id="stageCanvas"></canvas>
+
+      <div id="emptyHint" class="empty-hint">
+        <h2>把 MIDI 文件拖进来</h2>
+        <p>音符会从右向左飞行，穿过屏幕中央的竖线时触发命中特效</p>
+        <p class="dim">支持 .mid / .midi，可同时导入多个文件</p>
+      </div>
+
+      <div id="hud" class="hud">
+        <span id="hudTime">00:00.000</span>
+        <span class="sep">/</span>
+        <span id="hudDuration">00:00.000</span>
+        <span class="dot"></span>
+        <span id="hudNotes">0 音符</span>
+        <span class="dot"></span>
+        <span id="hudFps">– fps</span>
+      </div>
+
+      <div id="dropMask" class="drop-mask hidden"><div>松开鼠标以导入 MIDI</div></div>
+
+      <!-- 导出遮罩 -->
+      <div id="exportOverlay" class="export-overlay hidden">
+        <div class="export-card">
+          <h3 id="exportTitle">正在渲染视频…</h3>
+          <div class="bar"><div id="exportBar"></div></div>
+          <div class="export-meta">
+            <span id="exportPercent">0%</span>
+            <span id="exportEta"></span>
+          </div>
+          <p class="hint">渲染为实时录制：请保持此标签页在前台，不要切换窗口或最小化。</p>
+          <button class="btn ghost" id="btnCancelExport">取消导出</button>
+        </div>
+      </div>
+
+      <div id="toasts" class="toasts"></div>
+    </div>
+
+    <!-- 播放控制条 -->
+    <div id="transport">
+      <button class="tbtn" id="btnRestart" title="回到开头 (R)">⏮</button>
+      <button class="tbtn play" id="btnPlay" title="播放 / 暂停 (空格)">▶</button>
+      <div class="time-box">
+        <span id="tTime">00:00.000</span>
+      </div>
+      <input type="range" id="progress" class="progress" min="0" max="1000" value="0" step="1">
+      <div class="time-box dim" id="tDuration">00:00.000</div>
+      <label class="mini inline">速度
+        <select id="speedSelect">
+          <option value="0.25">0.25×</option>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+      </label>
+      <button class="tbtn" id="btnLoop" title="循环播放">🔁</button>
+      <button class="tbtn" id="btnAudio" title="开关声音">🔈</button>
+      <button class="tbtn" id="btnImmersive" title="沉浸模式 (F)">⛶</button>
+      <button class="tbtn accent" id="btnExport2" title="导出视频 (E)">导出视频</button>
+    </div>
+  </main>
+</div>
+
+<script src="js/util.js"></script>
+<script src="js/midi-parser.js"></script>
+<script src="js/midi-demo.js"></script>
+<script src="js/effects.js"></script>
+<script src="js/audio-engine.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/exporter.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "trackvisualizer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MIDI 可视化网页：note 从右向左飞过中央竖线，命中触发特效，支持多轨配色与视频导出",
+  "scripts": {
+    "test": "node test/parser-test.js && node test/render-test.js && node test/audio-test.js",
+    "test:parser": "node test/parser-test.js",
+    "test:render": "node test/render-test.js",
+    "test:audio": "node test/audio-test.js",
+    "test:browser": "node test/browser-test.js",
+    "test:export": "node test/export-test.js",
+    "test:audio-e2e": "node test/audio-e2e-test.js",
+    "test:perf": "node test/perf-test.js"
+  },
+  "keywords": ["midi", "visualizer", "canvas", "video-export"],
+  "license": "MIT"
+}
